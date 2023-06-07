@@ -14,16 +14,26 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 public class Hw3 {
     public static class TotalMapper extends Mapper<Object, Text, Text, IntWritable> {
 
-        private final static IntWritable runtime = new IntWritable();
+        private final static IntWritable runtime = new IntWritable(1);
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split(",");
-            if (fields.length >= 3) {
-                String movieTitle = fields[0];
-                int movieRuntime = Integer.parseInt(fields[14]);
-                runtime.set(movieRuntime);
-                context.write(new Text(movieTitle), runtime);
+            // split csv file by comma, but ignore commas in quotes (e.g. "The, Movie")
+            String[] fields = value.toString().split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            if (fields[14].equals("runtime")){
+                return;
             }
+
+            String movieTitle = fields[0];
+            double rt;
+            try {
+                rt = Double.parseDouble(fields[14]);
+            }
+            catch (NumberFormatException e) {
+                return;
+            }
+            int movieRuntime = (int) rt;
+            runtime.set(movieRuntime);
+            context.write(new Text("Total Runtime"), runtime);
         }
     }
 
@@ -37,39 +47,48 @@ public class Hw3 {
                 totalRuntime += val.get();
             }
             result.set(totalRuntime);
-            context.write(key, result);
+            context.write(new Text(key), result);
         }
     }
 
 
-    public static class AverageMapper extends Mapper<Object, Text, Text, IntWritable> {
+    public static class AverageMapper extends Mapper<Object, Text, Text, DoubleWritable> {
 
-        private final static IntWritable runtime = new IntWritable();
+        private final static DoubleWritable runtime = new DoubleWritable();
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split(",");
+            String[] fields = value.toString().split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            if (fields[14].equals("runtime")){
+                return;
+            }
 
             String movieTitle = fields[0];
-            int movieRuntime = Integer.parseInt(fields[14]);
+            double movieRuntime;
+            try {
+                movieRuntime = Double.parseDouble(fields[14]);
+            }
+            catch (NumberFormatException e) {
+                return;
+            }
             runtime.set(movieRuntime);
-            context.write(new Text(movieTitle), runtime);
+            context.write(new Text("Average Runtime"), runtime);
         }
     }
 
-    public static class AverageReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    public static class AverageReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
 
-        private IntWritable result = new IntWritable();
+        private DoubleWritable result = new DoubleWritable();
 
-        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
-            int totalRuntime = 0;
+        public void reduce(Text key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
+            double totalRuntime = 0;
             int movieCount = 0;
-            for (IntWritable val : values) {
+            for (DoubleWritable val : values) {
                 totalRuntime += val.get();
                 movieCount++;
             }
-            int averageRuntime = totalRuntime / movieCount;
+            double averageRuntime = totalRuntime / movieCount;
             result.set(averageRuntime);
-            context.write(key, result);
+            context.write(new Text(key), result);
         }
     }
 
@@ -79,7 +98,10 @@ public class Hw3 {
         private final static IntWritable one = new IntWritable(1);
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split(",");
+            String[] fields = value.toString().split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            if (fields[9].equals("star")){
+                return;
+            }
 
             String actor = fields[9];
             context.write(new Text(actor), one);
@@ -106,7 +128,10 @@ public class Hw3 {
         private final static IntWritable votes = new IntWritable();
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split(",");
+            String[] fields = value.toString().split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            if (fields[1].equals("rating")){
+                return;
+            }
 
             String rating = fields[1];
             if (rating.equals("G") || rating.equals("PG") || rating.equals("PG-13") || rating.equals("R")) {
@@ -140,13 +165,15 @@ public class Hw3 {
         private final static DoubleWritable score = new DoubleWritable();
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split(",");
-            if (fields.length >= 5) {
-                String genre = fields[4];
-                double movieScore = Double.parseDouble(fields[6]);
-                score.set(movieScore);
-                context.write(new Text(genre), score);
+            String[] fields = value.toString().split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            if (fields[4].equals("genre")){
+                return;
             }
+
+            String genre = fields[4];
+            double movieScore = Double.parseDouble(fields[6]);
+            score.set(movieScore);
+            context.write(new Text(genre), score);
         }
     }
 
@@ -194,7 +221,7 @@ public class Hw3 {
             job.setMapperClass(AverageMapper.class);
             job.setReducerClass(AverageReducer.class);
             job.setOutputKeyClass(Text.class);
-            job.setOutputValueClass(IntWritable.class);
+            job.setOutputValueClass(DoubleWritable.class);
             FileInputFormat.addInputPath(job, new Path(args[1]));
             FileOutputFormat.setOutputPath(job, new Path(args[2]));
             try {
