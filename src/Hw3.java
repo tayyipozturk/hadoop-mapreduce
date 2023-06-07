@@ -104,6 +104,9 @@ public class Hw3 {
             }
 
             String actor = fields[9];
+            if (actor.equals("")) {
+                return;
+            }
             context.write(new Text(actor), one);
         }
     }
@@ -123,9 +126,9 @@ public class Hw3 {
     }
 
 
-    public static class VotesMapper extends Mapper<Object, Text, Text, IntWritable> {
+    public static class VotesMapper extends Mapper<Object, Text, Text, DoubleWritable> {
 
-        private final static IntWritable votes = new IntWritable();
+        private final static DoubleWritable votes = new DoubleWritable();
 
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String[] fields = value.toString().split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)", -1);
@@ -135,27 +138,33 @@ public class Hw3 {
 
             String rating = fields[1];
             if (rating.equals("G") || rating.equals("PG") || rating.equals("PG-13") || rating.equals("R")) {
-                int voteCount = Integer.parseInt(fields[5]);
+                double voteCount;
+                try{
+                    voteCount = Double.parseDouble(fields[6]);
+                }
+                catch (NumberFormatException e) {
+                    return;
+                }
                 votes.set(voteCount);
                 context.write(new Text(rating), votes);
             }
         }
     }
 
-    public static class VotesReducer extends Reducer<Text, IntWritable, Text, DoubleWritable> {
+    public static class VotesReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
 
         private DoubleWritable result = new DoubleWritable();
 
-        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+        public void reduce(Text key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
             int totalVotes = 0;
             int movieCount = 0;
-            for (IntWritable val : values) {
+            for (DoubleWritable val : values) {
                 totalVotes += val.get();
                 movieCount++;
             }
             double averageVotes = (double) totalVotes / movieCount;
             result.set(averageVotes);
-            context.write(key, result);
+            context.write(new Text(key), result);
         }
     }
 
@@ -170,8 +179,19 @@ public class Hw3 {
                 return;
             }
 
-            String genre = fields[4];
-            double movieScore = Double.parseDouble(fields[6]);
+            String genre = fields[2];
+            if (genre.equals("")) {
+                return;
+            }
+
+            double movieScore;
+            try {
+                movieScore = Double.parseDouble(fields[5]);
+            }
+            catch (NumberFormatException e) {
+                return;
+            }
+
             score.set(movieScore);
             context.write(new Text(genre), score);
         }
@@ -253,7 +273,7 @@ public class Hw3 {
             job.setMapperClass(VotesMapper.class);
             job.setReducerClass(VotesReducer.class);
             job.setOutputKeyClass(Text.class);
-            job.setOutputValueClass(IntWritable.class);
+            job.setOutputValueClass(DoubleWritable.class);
             FileInputFormat.addInputPath(job, new Path(args[1]));
             FileOutputFormat.setOutputPath(job, new Path(args[2]));
             try {
